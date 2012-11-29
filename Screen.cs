@@ -33,7 +33,7 @@ namespace cmd
                                                  "Quit " };
 
         private InputBuffer _InputBuffer = new InputBuffer();
-        private FileList _FileList = new FileList();
+        private FileList _FileList;
         private int _CursorPosition = 0;
 
         private OutputBuffer _CommandBuffer = new OutputBuffer("#cmd#", ConsoleColor.DarkGray);
@@ -51,6 +51,7 @@ namespace cmd
             _Shell = shell;
             _OldIo = _Shell.IO;
             _CurrentMenu = _MainMenu;
+            _FileList = new FileList(shell);
 
             _Buffers.Add(_CommandBuffer);
         }
@@ -132,16 +133,17 @@ namespace cmd
 
             DrawMenu(height);
 
+            // draw prompt
             Console.SetCursorPosition(0, height - 1);
             Console.Write(Directory.GetCurrentDirectory() + ">");
             if (_CursorPosition == 0) _CursorPosition = Console.CursorLeft;
             int commandLineOffset = Console.CursorLeft;
-
             Console.Write(_InputBuffer.ToString());
             Console.SetCursorPosition(_CursorPosition, height - 1);
 
             bool refreshPrompt = false;
             bool refreshBuffer = false;
+            bool refreshList = false;
             ConsoleKeyInfo cki = Console.ReadKey(true);
             if (cki != null)
             {
@@ -171,12 +173,6 @@ namespace cmd
                     else
                         _CurrentMenu = _AltMenu;
                 }
-                else if ((cki.Modifiers & ConsoleModifiers.Alt) != 0)
-                {
-                }
-                else if ((cki.Modifiers & ConsoleModifiers.Control) != 0)
-                {
-                }
                 else if (cki.Key == ConsoleKey.Home)
                 {
                     _CursorPosition = commandLineOffset;
@@ -193,15 +189,17 @@ namespace cmd
                         _InputBuffer.Remove(bufpos - 1);
                         _CursorPosition--;
                         refreshPrompt = true;
+                        refreshList = true;
                     }
                 }
                 else if (cki.Key == ConsoleKey.Delete)
                 {
                     int bufpos = _CursorPosition - commandLineOffset;
-                    if (bufpos > 0)
+                    if (bufpos >= 0)
                     {
-                        _InputBuffer.Remove(bufpos - 1);
+                        _InputBuffer.Remove(bufpos);
                         refreshPrompt = true;
+                        refreshList = true;
                     }
                 }
                 else if (cki.Key == ConsoleKey.RightArrow)
@@ -214,24 +212,25 @@ namespace cmd
                 }
                 else if (cki.Key == ConsoleKey.Escape)
                 {
-                    _FileList.Erase();
+                    _FileList.Close();
+                    refreshBuffer = true;
                 }
                 else if (cki.Key == ConsoleKey.UpArrow)
                 {
                     _FileList.Draw(_InputBuffer, FileList.ArrowMovement.Up);
-                    if (_FileList.SelectedFileName != null)
+                    if (_FileList.SelectedValue != null)
                     {
-                        int len = _FileList.SelectedFileName.Length;
-                        _InputBuffer.Load(_FileList.SelectedFileName);
+                        int len = _FileList.SelectedValue.Length;
+                        _InputBuffer.Load(_FileList.PartialValue);
                     }
                 }
                 else if (cki.Key == ConsoleKey.DownArrow)
                 {
                     _FileList.Draw(_InputBuffer, FileList.ArrowMovement.Down);
-                    if (_FileList.SelectedFileName != null)
+                    if (_FileList.SelectedValue != null)
                     {
-                        int len = _FileList.SelectedFileName.Length;
-                        _InputBuffer.Load(_FileList.SelectedFileName);
+                        int len = _FileList.SelectedValue.Length;
+                        _InputBuffer.Load(_FileList.PartialValue);
                     }
                 }
                 else if (cki.Key == ConsoleKey.PageDown)
@@ -255,8 +254,12 @@ namespace cmd
                     _CursorPosition++;
                     int bufpos = _CursorPosition - commandLineOffset;
                     _InputBuffer.Insert(cki.KeyChar, bufpos - 1);
-                    _FileList.Draw(_InputBuffer, FileList.ArrowMovement.None);
+                    refreshList = true;
                 }
+            }
+            if (refreshList)
+            {
+                _FileList.Draw(_InputBuffer, FileList.ArrowMovement.None);
             }
             if (refreshPrompt)
             {
@@ -290,7 +293,10 @@ namespace cmd
             {
                 IMDbgCommand dbgcmd = null;
                 string cmdArgs = null;
-                _Shell.Commands.ParseCommand(_InputBuffer.ToString(), out dbgcmd, out cmdArgs);
+                string cmdLine = _InputBuffer.ToString();
+                if (string.IsNullOrEmpty(cmdLine)) return;
+
+                _Shell.Commands.ParseCommand(cmdLine, out dbgcmd, out cmdArgs);
                 dbgcmd.Execute(cmdArgs);
 
                 _InputBuffer.Clear();
@@ -298,7 +304,10 @@ namespace cmd
             }
             catch (Exception ex)
             {
-                WriteError(ex.Message);
+                if (ex.InnerException != null)
+                    WriteError(ex.InnerException.Message);
+                else
+                    WriteError(ex.Message);
             }
         }
 
@@ -307,7 +316,7 @@ namespace cmd
             Console.SetCursorPosition(0, Console.WindowTop);
             Console.ForegroundColor = ConsoleColor.White;
             Console.BackgroundColor = ConsoleColor.DarkRed;
-            Console.WriteLine("Exception = " + message);
+            Console.WriteLine("Error: " + message);
             Console.ResetColor();
         }
 
