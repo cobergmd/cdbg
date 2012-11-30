@@ -45,6 +45,8 @@ namespace cmd
         private IMDbgIO _OldIo = null;
         private bool _Running = false;
         private string[] _CurrentMenu = null;
+        private List<string> _CmdHistory = new List<string>();
+        private int _CmdHistoryIdx = 0;
 
         public Screen(IMDbgShell shell)
         {
@@ -217,20 +219,34 @@ namespace cmd
                 }
                 else if (cki.Key == ConsoleKey.UpArrow)
                 {
-                    _FileList.Draw(_InputBuffer, FileList.ArrowMovement.Up);
-                    if (_FileList.SelectedValue != null)
+                    if (_FileList.IsVisible)
                     {
-                        int len = _FileList.SelectedValue.Length;
-                        _InputBuffer.Load(_FileList.PartialValue);
+                        _FileList.MoveSelection(FileList.ArrowMovement.Up);
+                        refreshList = true;
+                    }
+                    else
+                    {
+                        // update prompt with command history
+                        _InputBuffer.Clear();
+                        _InputBuffer.Load(GetNextCommand());
+                        _CursorPosition = commandLineOffset + _InputBuffer.Length;
+                        refreshPrompt = true;
                     }
                 }
                 else if (cki.Key == ConsoleKey.DownArrow)
                 {
-                    _FileList.Draw(_InputBuffer, FileList.ArrowMovement.Down);
-                    if (_FileList.SelectedValue != null)
+                    if (_FileList.IsVisible)
                     {
-                        int len = _FileList.SelectedValue.Length;
-                        _InputBuffer.Load(_FileList.PartialValue);
+                        _FileList.MoveSelection(FileList.ArrowMovement.Down);
+                        refreshList = true;
+                    }
+                    else
+                    {
+                        // update prompt with command history
+                        _InputBuffer.Clear();
+                        _InputBuffer.Load(GetPreviousCommand());
+                        _CursorPosition = commandLineOffset + _InputBuffer.Length;
+                        refreshPrompt = true;
                     }
                 }
                 else if (cki.Key == ConsoleKey.PageDown)
@@ -259,7 +275,7 @@ namespace cmd
             }
             if (refreshList)
             {
-                _FileList.Draw(_InputBuffer, FileList.ArrowMovement.None);
+                _FileList.Draw(_InputBuffer);
             }
             if (refreshPrompt)
             {
@@ -296,6 +312,8 @@ namespace cmd
                 string cmdLine = _InputBuffer.ToString();
                 if (string.IsNullOrEmpty(cmdLine)) return;
 
+                _CmdHistory.Add(cmdLine);
+                _CmdHistoryIdx = 0;
                 _Shell.Commands.ParseCommand(cmdLine, out dbgcmd, out cmdArgs);
                 dbgcmd.Execute(cmdArgs);
 
@@ -303,12 +321,26 @@ namespace cmd
                 _CursorPosition = 0;
             }
             catch (Exception ex)
-            {
+            {                                                 
                 if (ex.InnerException != null)
                     WriteError(ex.InnerException.Message);
                 else
                     WriteError(ex.Message);
             }
+        }
+
+        private string GetPreviousCommand()
+        {
+            _CmdHistoryIdx--;
+            if (_CmdHistoryIdx < 0) _CmdHistoryIdx = _CmdHistory.Count() - 1;
+            return _CmdHistory[_CmdHistoryIdx];
+        }
+
+        private string GetNextCommand()
+        {
+            _CmdHistoryIdx++;
+            if (_CmdHistoryIdx > _CmdHistory.Count() - 1) _CmdHistoryIdx = 0;
+            return _CmdHistory[_CmdHistoryIdx];
         }
 
         public void WriteError(string message)

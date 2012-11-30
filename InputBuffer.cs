@@ -58,6 +58,10 @@ namespace cmd
 
         public void Load(string value)
         {
+            for (int i = 0; i < value.Length; i++ )
+            {
+                _Buffer[i] = value[i];
+            }
         }
 
         public override string ToString()

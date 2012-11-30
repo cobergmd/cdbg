@@ -35,6 +35,8 @@ namespace cmd
         public string SelectedValue { get; set; }
 
         public string PartialValue  { get; set; }
+
+        public bool IsVisible { get; set; }
                                                            
         public enum ArrowMovement
         {
@@ -49,7 +51,7 @@ namespace cmd
             LoadCommandList(shell);
         }
 
-        public void Draw(InputBuffer buffer, ArrowMovement arrowMovement)
+        public void Draw(InputBuffer buffer)
         {
             Erase();
             SelectedValue = null;
@@ -110,17 +112,6 @@ namespace cmd
             int count = _MatchList.Count();
             if (count == 0) return; // nothing matched, get out
 
-            if (arrowMovement == ArrowMovement.Up)
-            {
-                _ArrowPosition--;
-                if (_ArrowPosition < 1) _ArrowPosition = count;
-            }
-            else if (arrowMovement == ArrowMovement.Down)
-            {
-                _ArrowPosition++;
-                if (_ArrowPosition > count) _ArrowPosition = 1;
-            }
-
             _Top = (height - count) / 2;
             _Bottom = (_Top + count) + 2;
             _Left = (width - maxlen) / 2;
@@ -152,14 +143,29 @@ namespace cmd
             Console.SetCursorPosition(_Left, topPosition++);
             Console.Write(cellLeftBottom + string.Empty.PadRight(maxlen, '─') + cellRightBottom);
             Console.ResetColor();
-            _MatchList.Clear();
+
+            IsVisible = true;
+        }
+
+        public void MoveSelection(ArrowMovement arrowMovement)
+        {
+            if (arrowMovement == ArrowMovement.Up)
+            {
+                _ArrowPosition--;
+                if (_ArrowPosition < 1) _ArrowPosition = _MatchList.Count();
+            }
+            else if (arrowMovement == ArrowMovement.Down)
+            {
+                _ArrowPosition++;
+                if (_ArrowPosition > _MatchList.Count()) _ArrowPosition = 1;
+            }
         }
 
         public void Close()
         {
             Erase();
             _ArrowPosition = 0;
-       }
+        }
 
         private void Erase()
         {
@@ -169,6 +175,7 @@ namespace cmd
                 Console.Write(string.Empty.PadRight((_Right - _Left) + 3, ' '));
             }
             _MatchList.Clear();
+            IsVisible = false;
         }
 
         private void LoadCommandList(IMDbgShell shell)
