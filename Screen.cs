@@ -5,20 +5,21 @@ using System.Linq;
 using System.Text;
 
 using Microsoft.Samples.Tools.Mdbg;
+using Microsoft.Samples.Debugging.MdbgEngine;
 
 namespace cmd
 {
     public class Screen : IMDbgIO
     {
         private string[] _MainMenu = new string[] { "Help  ",
+                                                 "Status",
                                                  "      ",
-                                                 "      ",
-                                                 "      ",
+                                                 "Attach",
                                                  "Debug ",
                                                  "      ",
                                                  "      ",
                                                  "      ",
-                                                 "      ",
+                                                 "SetBrk",
                                                  "Quit " };
 
         private string[] _AltMenu = new string[] { "Help  ",
@@ -47,6 +48,7 @@ namespace cmd
         private string[] _CurrentMenu = null;
         private List<string> _CmdHistory = new List<string>();
         private int _CmdHistoryIdx = 0;
+        private string _SelectedCmd = null;
 
         public Screen(IMDbgShell shell)
         {
@@ -55,6 +57,8 @@ namespace cmd
             _CurrentMenu = _MainMenu;
             _FileList = new FileList(shell);
 
+            _CommandBuffer.Append("");
+            _CommandBuffer.Append("*** Command Output Buffer ***");
             _Buffers.Add(_CommandBuffer);
         }
 
@@ -139,6 +143,7 @@ namespace cmd
             Console.SetCursorPosition(0, height - 1);
             Console.Write(Directory.GetCurrentDirectory() + ">");
             if (_CursorPosition == 0) _CursorPosition = Console.CursorLeft;
+            if (_CursorPosition >= width) _CursorPosition = width - 1;
             int commandLineOffset = Console.CursorLeft;
             Console.Write(_InputBuffer.ToString());
             Console.SetCursorPosition(_CursorPosition, height - 1);
@@ -151,6 +156,16 @@ namespace cmd
             {
                 if (cki.Key == ConsoleKey.Enter) // evaluate
                 {
+                    if (_FileList.IsVisible)
+                    {
+                        if (_SelectedCmd != null)
+                        {
+                            _InputBuffer.Clear();
+                            _InputBuffer.Load(_SelectedCmd);
+                            _SelectedCmd = null;
+                        }
+                        _FileList.Close();
+                    }
                     ProcessCommandLine();
                     refreshPrompt = true;
                 }
@@ -163,6 +178,19 @@ namespace cmd
 
                     _CurrentBuffer = _Buffers[_CurrentBufferIdx];
                     refreshBuffer = true;
+                }
+                else if (cki.Key == ConsoleKey.Tab)
+                {
+                    if (_FileList.IsVisible && _SelectedCmd != null)
+                    {
+                        _InputBuffer.Clear();
+                        _InputBuffer.Load(_SelectedCmd);
+                        _CursorPosition = commandLineOffset + _InputBuffer.Length;
+                        _FileList.Close();
+                        _SelectedCmd = null;
+                        refreshBuffer = true;
+                        refreshPrompt = true;
+                    }
                 }
                 else if (cki.Key == ConsoleKey.F10)
                 {
@@ -221,7 +249,7 @@ namespace cmd
                 {
                     if (_FileList.IsVisible)
                     {
-                        _FileList.MoveSelection(FileList.ArrowMovement.Up);
+                        _SelectedCmd = _FileList.MoveSelection(FileList.ArrowMovement.Up);
                         refreshList = true;
                     }
                     else
@@ -237,7 +265,7 @@ namespace cmd
                 {
                     if (_FileList.IsVisible)
                     {
-                        _FileList.MoveSelection(FileList.ArrowMovement.Down);
+                        _SelectedCmd = _FileList.MoveSelection(FileList.ArrowMovement.Down);
                         refreshList = true;
                     }
                     else

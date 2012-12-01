@@ -32,10 +32,6 @@ namespace cmd
         private int _ArrowPosition = 0;
         private IMDbgShell _Shell = null;
 
-        public string SelectedValue { get; set; }
-
-        public string PartialValue  { get; set; }
-
         public bool IsVisible { get; set; }
                                                            
         public enum ArrowMovement
@@ -54,7 +50,6 @@ namespace cmd
         public void Draw(InputBuffer buffer)
         {
             Erase();
-            SelectedValue = null;
 
             int height = Console.WindowHeight;
             int width = Console.WindowWidth;
@@ -62,7 +57,6 @@ namespace cmd
             string buffString = buffer.ToString().Trim();
             if (buffString == string.Empty) return;
 
-            // determine what type of token we are matching
             string activeToken = null;
             int maxlen = 0;
             string[] tokens = buffString.Split(new char[] { ' ' });
@@ -80,11 +74,20 @@ namespace cmd
                     for (int i = 0; i < values.Count(); i++)
                     {
                         string value = values[i];
-                        values[i] = Path.GetFileName(value);
+                        values[i] = "open " + Path.GetFileName(value);
                     }
                 }
                 else if (tokens[0].Equals("cd"))
-                    values = Directory.GetDirectories(Directory.GetCurrentDirectory(), activeToken + "*");
+                {
+                    string curDir = Directory.GetCurrentDirectory();
+                    values = Directory.GetDirectories(curDir, activeToken + "*", 
+                                                    SearchOption.TopDirectoryOnly);
+                    for (int i = 0; i < values.Count(); i++)
+                    {
+                        string value = values[i];
+                        values[i] = "cd " + value;
+                    }
+                }
 
                 if (values == null) return; // GetDirectories returns null on no match 
                 foreach (string value in values)
@@ -132,8 +135,6 @@ namespace cmd
                 if (_ArrowPosition == cntr)
                 {
                     Console.BackgroundColor = ConsoleColor.DarkBlue ;
-                    PartialValue = match.Substring(activeToken.Length);
-                    SelectedValue = match;
                 }
 
                 Console.Write(string.Format("{0}{1}{2}", cellVerticalLine,
@@ -147,18 +148,26 @@ namespace cmd
             IsVisible = true;
         }
 
-        public void MoveSelection(ArrowMovement arrowMovement)
+        public string MoveSelection(ArrowMovement arrowMovement)
         {
-            if (arrowMovement == ArrowMovement.Up)
+            string selectedValue = null;
+
+            if (_MatchList != null && _MatchList.Count > 0)
             {
-                _ArrowPosition--;
-                if (_ArrowPosition < 1) _ArrowPosition = _MatchList.Count();
+                if (arrowMovement == ArrowMovement.Up)
+                {
+                    _ArrowPosition--;
+                    if (_ArrowPosition < 1) _ArrowPosition = _MatchList.Count();
+                }
+                else if (arrowMovement == ArrowMovement.Down)
+                {
+                    _ArrowPosition++;
+                    if (_ArrowPosition > _MatchList.Count()) _ArrowPosition = 1;
+                }
+                selectedValue = _MatchList[_ArrowPosition - 1];
             }
-            else if (arrowMovement == ArrowMovement.Down)
-            {
-                _ArrowPosition++;
-                if (_ArrowPosition > _MatchList.Count()) _ArrowPosition = 1;
-            }
+
+            return selectedValue; 
         }
 
         public void Close()

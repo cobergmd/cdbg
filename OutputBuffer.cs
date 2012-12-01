@@ -80,7 +80,11 @@ namespace cmd
                 Console.Write(string.Empty.PadRight(Console.WindowWidth, ' '));
                 Console.SetCursorPosition(0, i);
                 if ((_LineOffset + i) <= (count - 1))
-                    Console.Write(_Lines[i + _LineOffset]);
+                {
+                    int idx = i + _LineOffset;
+                    string linenum = idx.ToString().PadLeft(4);
+                    Console.Write(linenum + " " + _Lines[idx]);
+                }
             }
 
             Console.ResetColor();
