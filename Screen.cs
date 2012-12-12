@@ -3,13 +3,15 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Globalization;
 
 using Microsoft.Samples.Tools.Mdbg;
 using Microsoft.Samples.Debugging.MdbgEngine;
+using Microsoft.Samples.Debugging.CorDebug.NativeApi;
 
 namespace cmd
 {
-    public class Screen : IMDbgIO
+    public class Screen : IMDbgIO, IMDbgIO2
     {
         private string[] _MainMenu = new string[] { "Help  ",
                                                  "Status",
@@ -20,24 +22,28 @@ namespace cmd
                                                  "      ",
                                                  "      ",
                                                  "SetBrk",
-                                                 "Quit " };
+                                                 "Quit  ",
+                                                 "      ",
+                                                 "Menu  "};
 
         private string[] _AltMenu = new string[] { "Help  ",
                                                  "      ",
                                                  "View  ",
                                                  "Edit  ",
                                                  "Stop  ",
-                                                 "Into  ",
-                                                 "Over  ",
+                                                 "      ",
+                                                 "      ",
                                                  "Out   ",
-                                                 "Sym   ",
-                                                 "Quit " };
+                                                 "SetBrk",
+                                                 "Over  ",
+                                                 "Into  ",
+                                                 "Menu  "};
 
         private InputBuffer _InputBuffer = new InputBuffer();
         private FileList _FileList;
         private int _CursorPosition = 0;
 
-        private OutputBuffer _CommandBuffer = new OutputBuffer("#cmd#", ConsoleColor.DarkGray);
+        private OutputBuffer _CommandBuffer = new OutputBuffer("#cmd#", ConsoleColor.DarkGray, false);
         private OutputBuffer _CurrentBuffer = null;
         private List<OutputBuffer> _Buffers = new List<OutputBuffer>();
         private int _CurrentBufferIdx = -1;
@@ -52,13 +58,14 @@ namespace cmd
 
         public Screen(IMDbgShell shell)
         {
+            Console.WindowWidth = 100;
             _Shell = shell;
             _OldIo = _Shell.IO;
             _CurrentMenu = _MainMenu;
-            _FileList = new FileList(shell);
+            _FileList = new FileList(shell, Console.WindowHeight - 6);
 
             _CommandBuffer.Append("");
-            _CommandBuffer.Append("*** Command Output Buffer ***");
+            _CommandBuffer.Append("********** Command Output Buffer **********");
             _Buffers.Add(_CommandBuffer);
         }
 
@@ -94,10 +101,8 @@ namespace cmd
             }
         }
 
-        public void DisplayFile(string filename)
+        public void DisplayFile(string path, int highlight)
         {
-            string path = Directory.GetCurrentDirectory() + "/" + filename;
-
             bool exists = false;
             for (int i = 0; i < _Buffers.Count; i++)
             {
@@ -113,7 +118,7 @@ namespace cmd
 
             if (!exists)
             {
-                _CurrentBuffer = new OutputBuffer(path, ConsoleColor.DarkGreen);
+                _CurrentBuffer = new OutputBuffer(path, ConsoleColor.DarkGreen, true);
                 string line;
                 using (var reader = File.OpenText(path))
                 {
@@ -128,6 +133,7 @@ namespace cmd
             }
             if (_CurrentBuffer != null)
             {
+                _CurrentBuffer.HighLight = highlight;
                 _CurrentBuffer.Draw();
             }
         }
@@ -144,7 +150,9 @@ namespace cmd
             Console.Write(Directory.GetCurrentDirectory() + ">");
             if (_CursorPosition == 0) _CursorPosition = Console.CursorLeft;
             if (_CursorPosition >= width) _CursorPosition = width - 1;
-            int commandLineOffset = Console.CursorLeft;
+            int commandLineBegin = Console.CursorLeft;
+            int commandLineLen = width - commandLineBegin;
+
             Console.Write(_InputBuffer.ToString());
             Console.SetCursorPosition(_CursorPosition, height - 1);
 
@@ -185,7 +193,7 @@ namespace cmd
                     {
                         _InputBuffer.Clear();
                         _InputBuffer.Load(_SelectedCmd);
-                        _CursorPosition = commandLineOffset + _InputBuffer.Length;
+                        _CursorPosition = commandLineBegin + _InputBuffer.Length;
                         _FileList.Close();
                         _SelectedCmd = null;
                         refreshBuffer = true;
@@ -205,15 +213,15 @@ namespace cmd
                 }
                 else if (cki.Key == ConsoleKey.Home)
                 {
-                    _CursorPosition = commandLineOffset;
+                    _CursorPosition = commandLineBegin;
                 }
                 else if (cki.Key == ConsoleKey.End)
                 {
-                    _CursorPosition = commandLineOffset + _InputBuffer.Length;
+                    _CursorPosition = commandLineBegin + _InputBuffer.Length;
                 }
                 else if (cki.Key == ConsoleKey.Backspace)
                 {
-                    int bufpos = _CursorPosition - commandLineOffset;
+                    int bufpos = _CursorPosition - commandLineBegin;
                     if (bufpos > 0)
                     {
                         _InputBuffer.Remove(bufpos - 1);
@@ -224,7 +232,7 @@ namespace cmd
                 }
                 else if (cki.Key == ConsoleKey.Delete)
                 {
-                    int bufpos = _CursorPosition - commandLineOffset;
+                    int bufpos = _CursorPosition - commandLineBegin;
                     if (bufpos >= 0)
                     {
                         _InputBuffer.Remove(bufpos);
@@ -257,7 +265,7 @@ namespace cmd
                         // update prompt with command history
                         _InputBuffer.Clear();
                         _InputBuffer.Load(GetNextCommand());
-                        _CursorPosition = commandLineOffset + _InputBuffer.Length;
+                        _CursorPosition = commandLineBegin + _InputBuffer.Length;
                         refreshPrompt = true;
                     }
                 }
@@ -273,7 +281,7 @@ namespace cmd
                         // update prompt with command history
                         _InputBuffer.Clear();
                         _InputBuffer.Load(GetPreviousCommand());
-                        _CursorPosition = commandLineOffset + _InputBuffer.Length;
+                        _CursorPosition = commandLineBegin + _InputBuffer.Length;
                         refreshPrompt = true;
                     }
                 }
@@ -296,7 +304,7 @@ namespace cmd
                 else // add to buffer
                 {
                     _CursorPosition++;
-                    int bufpos = _CursorPosition - commandLineOffset;
+                    int bufpos = _CursorPosition - commandLineBegin;
                     _InputBuffer.Insert(cki.KeyChar, bufpos - 1);
                     refreshList = true;
                 }
@@ -318,16 +326,16 @@ namespace cmd
 
         private void DrawMenu(int position)
         {
+            Console.SetCursorPosition(0, position);
             int idx = 0;
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < _CurrentMenu.Length; i++)
             {
-                Console.SetCursorPosition(idx, position);
-                idx = idx + 8;
                 Console.Write(i + 1);
                 Console.ForegroundColor = ConsoleColor.Black;
                 Console.BackgroundColor = ConsoleColor.DarkCyan;
                 Console.Write(_CurrentMenu[i]);
                 Console.ResetColor();
+                Console.Write(" ");
             }
         }
 
@@ -347,6 +355,9 @@ namespace cmd
 
                 _InputBuffer.Clear();
                 _CursorPosition = 0;
+
+                // display current location if debugging
+                DisplaySource();
             }
             catch (Exception ex)
             {                                                 
@@ -357,8 +368,79 @@ namespace cmd
             }
         }
 
+        private void DisplaySource()
+        {
+            if (!_Shell.Debugger.Processes.HaveActive)
+            {
+                //CommandBase.WriteOutput("STOP: Process Exited");
+                return; // don't try to display current location
+            }
+            else
+            {
+                Object stopReason = _Shell.Debugger.Processes.Active.StopReason;
+                Type stopReasonType = stopReason.GetType();
+                if (stopReasonType == typeof(StepCompleteStopReason))
+                {
+                    // just ignore those
+                }
+            }
+
+            if (!_Shell.Debugger.Processes.Active.Threads.HaveActive)
+            {
+                return;  // we won't try to show current location
+            }
+
+            MDbgThread thr = _Shell.Debugger.Processes.Active.Threads.Active;
+            MDbgSourcePosition pos = thr.CurrentSourcePosition;
+            if (pos == null)
+            {
+                MDbgFrame f = thr.CurrentFrame;
+                if (f.IsManaged)
+                {
+                    CorDebugMappingResult mappingResult;
+                    uint ip;
+                    f.CorFrame.GetIP(out ip, out mappingResult);
+                    string s = "IP: " + ip + " @ " + f.Function.FullName + " - " + mappingResult;
+                    CommandBase.WriteOutput(s);
+                }
+                else
+                {
+                    CommandBase.WriteOutput("<Located in native code.>");
+                }
+            }
+            else
+            {
+                string fileLoc = _Shell.FileLocator.GetFileLocation(pos.Path);
+                if (fileLoc == null)
+                {
+                    // Using the full path makes debugging output inconsistant during automated test runs.
+                    // For testing purposes we'll get rid of them.
+                    //CommandBase.WriteOutput("located at line "+pos.Line + " in "+ pos.Path);
+                    CommandBase.WriteOutput("located at line " + pos.Line + " in " + System.IO.Path.GetFileName(pos.Path));
+                }
+                else
+                {
+                    IMDbgSourceFile file = _Shell.SourceFileMgr.GetSourceFile(fileLoc);
+                    string prefixStr = pos.Line.ToString(CultureInfo.InvariantCulture) + ":";
+
+                    if (pos.Line < 1 || pos.Line > file.Count)
+                    {
+                        CommandBase.WriteOutput("located at line " + pos.Line + " in " + pos.Path);
+                        throw new MDbgShellException(string.Format("Could not display current location; file {0} doesn't have line {1}.",
+                                                                   file.Path, pos.Line));
+                    }
+
+                    string lineContent = file[pos.Line];
+
+                    DisplayFile(file.Path, pos.Line);
+                }
+            }
+        }
+
         private string GetPreviousCommand()
         {
+            if (_CmdHistory.Count == 0) return null;
+
             _CmdHistoryIdx--;
             if (_CmdHistoryIdx < 0) _CmdHistoryIdx = _CmdHistory.Count() - 1;
             return _CmdHistory[_CmdHistoryIdx];
@@ -366,6 +448,8 @@ namespace cmd
 
         private string GetNextCommand()
         {
+            if (_CmdHistory.Count == 0) return null;
+
             _CmdHistoryIdx++;
             if (_CmdHistoryIdx > _CmdHistory.Count() - 1) _CmdHistoryIdx = 0;
             return _CmdHistory[_CmdHistoryIdx];
@@ -390,6 +474,13 @@ namespace cmd
         public bool ReadCommand(out string command)
         {                                      
             return _OldIo.ReadCommand(out command);   
+        }
+
+        public void WriteOutput(string outputType, string message, int highlightStart, int highlightLen)
+        {
+            _CommandBuffer.Append(message);
+            _CurrentBuffer = _CommandBuffer;
+            _CurrentBuffer.Draw();
         }
     }
 }

@@ -95,7 +95,9 @@ namespace cmd
         )]
         public static void OpenFile(string args)
         {
-            _console.DisplayFile(args);
+            string path = Directory.GetCurrentDirectory() + "/" + args;
+
+            _console.DisplayFile(path, -1);
         }
     }
 }

@@ -7,7 +7,7 @@ namespace cmd
 {
     public class InputBuffer
     {
-        private static readonly int _BufSize = 100;
+        private static readonly int _BufSize = 1000;
         private char[] _Buffer = new char[_BufSize];
         private int _BufferIdx = 0;
 
@@ -58,6 +58,8 @@ namespace cmd
 
         public void Load(string value)
         {
+            if (value == null) return;
+
             for (int i = 0; i < value.Length; i++ )
             {
                 _Buffer[i] = value[i];

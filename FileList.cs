@@ -21,15 +21,20 @@ namespace cmd
         const string cellVerticalJointRight = "┤";
         const string cellHorizontalLine = "─";
         const string cellVerticalLine = "│";
+        const string upArrow = "↑";
+        const string downArrow = "↓";
+        const string rightArrow = "→";
+        const string leftArrow = "←";
 
         private int _Top = 0;
         private int _Bottom = 0;
         private int _Right = 0;
         private int _Left = 0;
+        private int _MaxHeight = 0;
 
-        private List<string> _MatchList = new List<string>();
+        private List<string> _AutoCompleteList = new List<string>();
         private List<string> _CmdList = new List<string>();
-        private int _ArrowPosition = 0;
+        private int _ArrowPosition = -1;
         private IMDbgShell _Shell = null;
 
         public bool IsVisible { get; set; }
@@ -41,9 +46,10 @@ namespace cmd
             Down
         }
 
-        public FileList(IMDbgShell shell)
+        public FileList(IMDbgShell shell, int maxHeight)
         {
             _Shell = shell;
+            _MaxHeight = maxHeight;
             LoadCommandList(shell);
         }
 
@@ -51,73 +57,18 @@ namespace cmd
         {
             Erase();
 
-            int height = Console.WindowHeight;
-            int width = Console.WindowWidth;
-
             string buffString = buffer.ToString().Trim();
             if (buffString == string.Empty) return;
 
-            string activeToken = null;
-            int maxlen = 0;
-            string[] tokens = buffString.Split(new char[] { ' ' });
-            if (tokens.Count() > 1)
-            {
-                activeToken = tokens[1];
+            int maxlen = CreateAutoCompleteList(buffString);
 
-                // ignore strings that might be directory commands
-                if (!activeToken.All(Char.IsLetterOrDigit)) return;
+            int displaycount = _AutoCompleteList.Count();
+            if (displaycount == 0) return; // nothing matched, get out
+            if (displaycount > _MaxHeight) displaycount = _MaxHeight;
 
-                string[] values = null;
-                if (tokens[0].Equals("open"))
-                {
-                    values = Directory.GetFiles(Directory.GetCurrentDirectory(), activeToken + "*");
-                    for (int i = 0; i < values.Count(); i++)
-                    {
-                        string value = values[i];
-                        values[i] = "open " + Path.GetFileName(value);
-                    }
-                }
-                else if (tokens[0].Equals("cd"))
-                {
-                    string curDir = Directory.GetCurrentDirectory();
-                    values = Directory.GetDirectories(curDir, activeToken + "*", 
-                                                    SearchOption.TopDirectoryOnly);
-                    for (int i = 0; i < values.Count(); i++)
-                    {
-                        string value = values[i];
-                        values[i] = "cd " + value;
-                    }
-                }
-
-                if (values == null) return; // GetDirectories returns null on no match 
-                foreach (string value in values)
-                {
-                    if (value.Length > maxlen)
-                        maxlen = value.Length;
-                    _MatchList.Add(value);
-                }
-            }
-            else if (tokens.Count() == 1)
-            {
-                activeToken = tokens[0];
-
-                foreach (string cmd in _CmdList)
-                {
-                    if (cmd.StartsWith(buffString))
-                    {
-                        if (cmd.Length > maxlen)
-                            maxlen = cmd.Length;
-                        _MatchList.Add(cmd);
-                    }
-                }
-            }
-
-            int count = _MatchList.Count();
-            if (count == 0) return; // nothing matched, get out
-
-            _Top = (height - count) / 2;
-            _Bottom = (_Top + count) + 2;
-            _Left = (width - maxlen) / 2;
+            _Top = (Console.WindowHeight - displaycount) / 2;
+            _Bottom = (_Top + displaycount) + 2;
+            _Left = (Console.WindowWidth - maxlen) / 2;
             _Right = _Left + maxlen;
 
             int topPosition = _Top;
@@ -125,10 +76,15 @@ namespace cmd
             Console.BackgroundColor = ConsoleColor.DarkCyan;
             Console.SetCursorPosition(_Left, topPosition++);
             Console.Write(cellLeftTop + string.Empty.PadRight(maxlen, '─') + cellRightTop);
-            int cntr = 0;
-            foreach (string match in _MatchList)
+
+            int listOffset = 0;
+            if (_ArrowPosition >= displaycount)
+                listOffset = _ArrowPosition - (displaycount - 1);
+                                                               
+            for (int cntr = listOffset; cntr < (displaycount + listOffset); cntr++)
             {
-                cntr++;
+                string match = _AutoCompleteList[cntr];
+                
                 Console.SetCursorPosition(_Left, topPosition++);
                 Console.BackgroundColor = ConsoleColor.DarkCyan;
 
@@ -148,23 +104,84 @@ namespace cmd
             IsVisible = true;
         }
 
+        private int CreateAutoCompleteList(string buffString)
+        {
+            string activeToken = null;
+            int maxlen = 0;
+            string[] tokens = buffString.Split(new char[] { ' ' });
+            if (tokens.Count() > 1)
+            {
+                activeToken = tokens[1];
+
+                // ignore strings that might be directory commands
+                if (!activeToken.All(Char.IsLetterOrDigit)) return 0;
+
+                string[] values = null;
+                if (tokens[0].Equals("open"))
+                {
+                    values = Directory.GetFiles(Directory.GetCurrentDirectory(), activeToken + "*");
+                    for (int i = 0; i < values.Count(); i++)
+                    {
+                        string value = values[i];
+                        values[i] = "open " + Path.GetFileName(value);
+                    }
+                }
+                else if (tokens[0].Equals("cd"))
+                {
+                    string curDir = Directory.GetCurrentDirectory();
+                    values = Directory.GetDirectories(curDir, activeToken + "*",
+                                                    SearchOption.TopDirectoryOnly);
+                    for (int i = 0; i < values.Count(); i++)
+                    {
+                        string value = values[i];
+                        values[i] = "cd " + value;
+                    }
+                }
+
+                if (values != null)
+                {
+                    foreach (string value in values)
+                    {
+                        if (value.Length > maxlen)
+                            maxlen = value.Length;
+                        _AutoCompleteList.Add(value);
+                    }
+                }
+            }
+            else if (tokens.Count() == 1)
+            {
+                activeToken = tokens[0];
+
+                foreach (string cmd in _CmdList)
+                {
+                    if (cmd.StartsWith(buffString))
+                    {
+                        if (cmd.Length > maxlen)
+                            maxlen = cmd.Length;
+                        _AutoCompleteList.Add(cmd);
+                    }
+                }
+            }
+            return maxlen;
+        }
+
         public string MoveSelection(ArrowMovement arrowMovement)
         {
             string selectedValue = null;
 
-            if (_MatchList != null && _MatchList.Count > 0)
+            if (_AutoCompleteList != null && _AutoCompleteList.Count > 0)
             {
                 if (arrowMovement == ArrowMovement.Up)
                 {
                     _ArrowPosition--;
-                    if (_ArrowPosition < 1) _ArrowPosition = _MatchList.Count();
+                    if (_ArrowPosition < 0) _ArrowPosition = _AutoCompleteList.Count() - 1;
                 }
                 else if (arrowMovement == ArrowMovement.Down)
                 {
                     _ArrowPosition++;
-                    if (_ArrowPosition > _MatchList.Count()) _ArrowPosition = 1;
+                    if (_ArrowPosition > _AutoCompleteList.Count() - 1) _ArrowPosition = 0;
                 }
-                selectedValue = _MatchList[_ArrowPosition - 1];
+                selectedValue = _AutoCompleteList[_ArrowPosition];
             }
 
             return selectedValue; 
@@ -173,7 +190,7 @@ namespace cmd
         public void Close()
         {
             Erase();
-            _ArrowPosition = 0;
+            _ArrowPosition = -1;
         }
 
         private void Erase()
@@ -183,7 +200,7 @@ namespace cmd
                 Console.SetCursorPosition(_Left - 1, i); // move an extra space to the left to clear a sliver left over
                 Console.Write(string.Empty.PadRight((_Right - _Left) + 3, ' '));
             }
-            _MatchList.Clear();
+            _AutoCompleteList.Clear();
             IsVisible = false;
         }
 

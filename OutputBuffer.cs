@@ -11,12 +11,15 @@ namespace cmd
         private List<string> _Lines = new List<string>();
         private int _LineOffset = 0;
         private ConsoleColor _TextColor = ConsoleColor.DarkGreen;
-
+        private bool _ShowLineNumbers = false;
+        
         public string Name { get; set; }
+        public int HighLight { get; set; }
 
-        public OutputBuffer(string name, ConsoleColor textColor)
+        public OutputBuffer(string name, ConsoleColor textColor, bool showLineNumbers)
         {
             _TextColor = textColor;
+            _ShowLineNumbers = showLineNumbers;
             this.Name = name;
         }
 
@@ -72,6 +75,7 @@ namespace cmd
             int bottom = Console.WindowHeight - 2;
 
             Console.ForegroundColor = _TextColor;
+            ConsoleColor currentBGC = Console.BackgroundColor;
 
             int count = _Lines.Count;
             for (int i = 0; i <= bottom; i++)
@@ -83,7 +87,12 @@ namespace cmd
                 {
                     int idx = i + _LineOffset;
                     string linenum = idx.ToString().PadLeft(4);
-                    Console.Write(linenum + " " + _Lines[idx]);
+                    if (i == HighLight-1)
+                        Console.BackgroundColor = ConsoleColor.Yellow;
+                    else
+                        Console.BackgroundColor = currentBGC;
+
+                    Console.Write(String.Format("{0} {1}", _ShowLineNumbers ? linenum : "", _Lines[idx]));
                 }
             }
 
