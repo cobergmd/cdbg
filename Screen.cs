@@ -9,29 +9,16 @@ using Microsoft.Samples.Tools.Mdbg;
 using Microsoft.Samples.Debugging.MdbgEngine;
 using Microsoft.Samples.Debugging.CorDebug.NativeApi;
 
-namespace cmd
+namespace cjomd.Mdbg.Extensions.Cdbg
 {
     public class Screen : IMDbgIO, IMDbgIO2
     {
         private string[] _MainMenu = new string[] { "Help  ",
-                                                 "Status",
+                                                 "View",
                                                  "      ",
-                                                 "Attach",
-                                                 "Debug ",
-                                                 "      ",
-                                                 "      ",
-                                                 "      ",
-                                                 "SetBrk",
                                                  "Quit  ",
-                                                 "      ",
-                                                 "Menu  "};
-
-        private string[] _AltMenu = new string[] { "Help  ",
-                                                 "      ",
-                                                 "View  ",
-                                                 "Edit  ",
-                                                 "Stop  ",
-                                                 "      ",
+                                                 "Run   ",
+                                                 "Attach",
                                                  "      ",
                                                  "Out   ",
                                                  "SetBrk",
@@ -39,22 +26,35 @@ namespace cmd
                                                  "Into  ",
                                                  "Menu  "};
 
-        private InputBuffer _InputBuffer = new InputBuffer();
-        private FileList _FileList;
-        private int _CursorPosition = 0;
+        private string[] _AltMenu = new string[] { "Help  ",
+                                                 "      ",
+                                                 "      ",
+                                                 "Edit  ",
+                                                 "Stop  ",
+                                                 "      ",
+                                                 "      ",
+                                                 "      ",
+                                                 "      ",
+                                                 "      ",
+                                                 "      ",
+                                                 "Menu  "};
 
-        private OutputBuffer _CommandBuffer = new OutputBuffer("#cmd#", ConsoleColor.DarkGray, false);
-        private OutputBuffer _CurrentBuffer = null;
-        private List<OutputBuffer> _Buffers = new List<OutputBuffer>();
-        private int _CurrentBufferIdx = -1;
-
-        private IMDbgShell _Shell = null;
-        private IMDbgIO _OldIo = null;
         private bool _Running = false;
         private string[] _CurrentMenu = null;
         private List<string> _CmdHistory = new List<string>();
         private int _CmdHistoryIdx = 0;
         private string _SelectedCmd = null;
+
+        private FileList _FileList;
+        private CommandPrompt _Prompt = new CommandPrompt();
+        private CommandViewer _CommandView = new CommandViewer("#cmd#");
+        private VariableViewer _VariableView;
+        private OutputBuffer _CurrentView = null;
+        private List<OutputBuffer> _Buffers = new List<OutputBuffer>();
+        private int _CurrentBufferIdx = -1;
+
+        private IMDbgShell _Shell = null;
+        private IMDbgIO _OldIo = null;
 
         public Screen(IMDbgShell shell)
         {
@@ -63,10 +63,8 @@ namespace cmd
             _OldIo = _Shell.IO;
             _CurrentMenu = _MainMenu;
             _FileList = new FileList(shell, Console.WindowHeight - 6);
-
-            _CommandBuffer.Append("");
-            _CommandBuffer.Append("********** Command Output Buffer **********");
-            _Buffers.Add(_CommandBuffer);
+            _VariableView = new VariableViewer("#var#", _Shell);
+            _Buffers.Add(_CommandView);
         }
 
         public void Start()
@@ -90,14 +88,10 @@ namespace cmd
 
         public void Clear()
         {
-            if (_CurrentBuffer == _CommandBuffer)
+            if (_CurrentView == _CommandView)
             {
-                _CommandBuffer.Clear();
-                _CommandBuffer.Draw();
-            }
-            else
-            {
-                // write message that you can't clear file buffer contents
+                _CommandView.Clear();
+                _CommandView.Draw();
             }
         }
 
@@ -111,53 +105,40 @@ namespace cmd
                 {
                     exists = true;
                     _CurrentBufferIdx = i;
-                    _CurrentBuffer = buffer;
+                    _CurrentView = buffer;
                     break;
                 }
             }
 
             if (!exists)
             {
-                _CurrentBuffer = new OutputBuffer(path, ConsoleColor.DarkGreen, true);
+                _CurrentView = new SourceViewer(path);
                 string line;
                 using (var reader = File.OpenText(path))
                 {
                     while ((line = reader.ReadLine()) != null)
                     {
-                        _CurrentBuffer.Append(line);
+                        _CurrentView.Append(line);
                     }
                 }
 
-                _Buffers.Add(_CurrentBuffer);
-                _CurrentBufferIdx = _Buffers.Count-1;
+                _Buffers.Add(_CurrentView);
+                _CurrentBufferIdx = _Buffers.Count - 1;
             }
-            if (_CurrentBuffer != null)
+            if (_CurrentView != null)
             {
-                _CurrentBuffer.HighLight = highlight;
-                _CurrentBuffer.Draw();
+                _CurrentView.HighLight = highlight;
+                _CurrentView.Draw();
             }
         }
 
         public void Draw()
         {
-            int height = Console.WindowHeight;
-            int width = Console.WindowWidth;
+            int winHeight = Console.WindowHeight;
+            DrawMenu(winHeight - 1);
+            _Prompt.Draw(winHeight - 2);
 
-            DrawMenu(height);
-
-            // draw prompt
-            Console.SetCursorPosition(0, height - 1);
-            Console.Write(Directory.GetCurrentDirectory() + ">");
-            if (_CursorPosition == 0) _CursorPosition = Console.CursorLeft;
-            if (_CursorPosition >= width) _CursorPosition = width - 1;
-            int commandLineBegin = Console.CursorLeft;
-            int commandLineLen = width - commandLineBegin;
-
-            Console.Write(_InputBuffer.ToString());
-            Console.SetCursorPosition(_CursorPosition, height - 1);
-
-            bool refreshPrompt = false;
-            bool refreshBuffer = false;
+            bool refreshViewer = false;
             bool refreshList = false;
             ConsoleKeyInfo cki = Console.ReadKey(true);
             if (cki != null)
@@ -168,14 +149,12 @@ namespace cmd
                     {
                         if (_SelectedCmd != null)
                         {
-                            _InputBuffer.Clear();
-                            _InputBuffer.Load(_SelectedCmd);
+                            _Prompt.Load(_SelectedCmd);
                             _SelectedCmd = null;
                         }
                         _FileList.Close();
                     }
                     ProcessCommandLine();
-                    refreshPrompt = true;
                 }
                 else if (cki.Key == ConsoleKey.Tab && (cki.Modifiers & ConsoleModifiers.Control) != 0)
                 {
@@ -184,25 +163,33 @@ namespace cmd
                     else
                         _CurrentBufferIdx += 1;
 
-                    _CurrentBuffer = _Buffers[_CurrentBufferIdx];
-                    refreshBuffer = true;
+                    _CurrentView = _Buffers[_CurrentBufferIdx];
+                    refreshViewer = true;
                 }
                 else if (cki.Key == ConsoleKey.Tab)
                 {
                     if (_FileList.IsVisible && _SelectedCmd != null)
                     {
-                        _InputBuffer.Clear();
-                        _InputBuffer.Load(_SelectedCmd);
-                        _CursorPosition = commandLineBegin + _InputBuffer.Length;
+                        _Prompt.Load(_SelectedCmd);
                         _FileList.Close();
                         _SelectedCmd = null;
-                        refreshBuffer = true;
-                        refreshPrompt = true;
+                        refreshViewer = true;
                     }
+                }
+                else if (cki.Key == ConsoleKey.F2)
+                {
+                    ShowVariableViewer();
+                }
+                else if (cki.Key == ConsoleKey.F4)
+                {
+                    Stop();
                 }
                 else if (cki.Key == ConsoleKey.F10)
                 {
-                    Stop();
+                    string cmdArgs = null;
+                    IMDbgCommand dbgcmd = null;
+                    _Shell.Commands.ParseCommand("n", out dbgcmd, out cmdArgs);
+                    dbgcmd.Execute(cmdArgs);
                 }
                 else if (cki.Key == ConsoleKey.F12)
                 {
@@ -213,115 +200,119 @@ namespace cmd
                 }
                 else if (cki.Key == ConsoleKey.Home)
                 {
-                    _CursorPosition = commandLineBegin;
+                    _Prompt.MoveToHome();
                 }
                 else if (cki.Key == ConsoleKey.End)
                 {
-                    _CursorPosition = commandLineBegin + _InputBuffer.Length;
+                    _Prompt.MoveToEnd();
                 }
                 else if (cki.Key == ConsoleKey.Backspace)
                 {
-                    int bufpos = _CursorPosition - commandLineBegin;
-                    if (bufpos > 0)
-                    {
-                        _InputBuffer.Remove(bufpos - 1);
-                        _CursorPosition--;
-                        refreshPrompt = true;
-                        refreshList = true;
-                    }
+                    _Prompt.Backspace();
+                    refreshList = true;
                 }
                 else if (cki.Key == ConsoleKey.Delete)
                 {
-                    int bufpos = _CursorPosition - commandLineBegin;
-                    if (bufpos >= 0)
-                    {
-                        _InputBuffer.Remove(bufpos);
-                        refreshPrompt = true;
-                        refreshList = true;
-                    }
+                    _Prompt.Delete();
+                    refreshList = true;
                 }
                 else if (cki.Key == ConsoleKey.RightArrow)
                 {
-                    _CursorPosition++;
+                    _Prompt.MoveRight();
                 }
                 else if (cki.Key == ConsoleKey.LeftArrow)
                 {
-                    _CursorPosition--;
+                    _Prompt.MoveLeft();
                 }
                 else if (cki.Key == ConsoleKey.Escape)
                 {
                     _FileList.Close();
-                    refreshBuffer = true;
+                    refreshViewer = true;
                 }
                 else if (cki.Key == ConsoleKey.UpArrow)
                 {
-                    if (_FileList.IsVisible)
+                    if ((cki.Modifiers & ConsoleModifiers.Control) != 0)
                     {
-                        _SelectedCmd = _FileList.MoveSelection(FileList.ArrowMovement.Up);
-                        refreshList = true;
+                        if (_CurrentView != null)
+                        {
+                            _CurrentView.DecreaseLine(1);
+                            refreshViewer = true;
+                        }
                     }
                     else
                     {
-                        // update prompt with command history
-                        _InputBuffer.Clear();
-                        _InputBuffer.Load(GetNextCommand());
-                        _CursorPosition = commandLineBegin + _InputBuffer.Length;
-                        refreshPrompt = true;
+                        if (_FileList.IsVisible)
+                        {
+                            _SelectedCmd = _FileList.MoveSelection(FileList.ArrowMovement.Up);
+                            refreshList = true;
+                        }
+                        else
+                        {
+                            // update prompt with command history
+                            _Prompt.Load(GetNextCommand());
+                        }
                     }
                 }
                 else if (cki.Key == ConsoleKey.DownArrow)
                 {
-                    if (_FileList.IsVisible)
+                    if ((cki.Modifiers & ConsoleModifiers.Control) != 0)
                     {
-                        _SelectedCmd = _FileList.MoveSelection(FileList.ArrowMovement.Down);
-                        refreshList = true;
+                        if (_CurrentView != null)
+                        {
+                            _CurrentView.IncreaseLine(1);
+                            refreshViewer = true;
+                        }
                     }
                     else
                     {
-                        // update prompt with command history
-                        _InputBuffer.Clear();
-                        _InputBuffer.Load(GetPreviousCommand());
-                        _CursorPosition = commandLineBegin + _InputBuffer.Length;
-                        refreshPrompt = true;
+                        if (_FileList.IsVisible)
+                        {
+                            _SelectedCmd = _FileList.MoveSelection(FileList.ArrowMovement.Down);
+                            refreshList = true;
+                        }
+                        else
+                        {
+                            // update prompt with command history
+                            _Prompt.Load(GetPreviousCommand());
+                        }
                     }
                 }
                 else if (cki.Key == ConsoleKey.PageDown)
                 {
-                    if (_CurrentBuffer != null)
+                    if (_CurrentView != null)
                     {
-                        _CurrentBuffer.IncreasePage();
-                        refreshBuffer = true;
+                        _CurrentView.IncreasePage();
+                        refreshViewer = true;
                     }
                 }
                 else if (cki.Key == ConsoleKey.PageUp)
                 {
-                    if (_CurrentBuffer != null)
+                    if (_CurrentView != null)
                     {
-                        _CurrentBuffer.DecreasePage();
-                        refreshBuffer = true;
+                        _CurrentView.DecreasePage();
+                        refreshViewer = true;
                     }
                 }
                 else // add to buffer
                 {
-                    _CursorPosition++;
-                    int bufpos = _CursorPosition - commandLineBegin;
-                    _InputBuffer.Insert(cki.KeyChar, bufpos - 1);
+                    _Prompt.AddCharacter(cki.KeyChar);
                     refreshList = true;
                 }
             }
             if (refreshList)
             {
-                _FileList.Draw(_InputBuffer);
+                _FileList.Draw(_Prompt.ToString());
             }
-            if (refreshPrompt)
+            if (_CurrentView != null && refreshViewer)
             {
-                Console.SetCursorPosition(0, height - 1);
-                Console.Write(string.Empty.PadRight(Console.WindowWidth, ' '));
+                _CurrentView.Draw();
             }
-            if (_CurrentBuffer != null && refreshBuffer)
-            {
-                _CurrentBuffer.Draw();
-            }
+        }
+
+        private void ShowVariableViewer()
+        {
+            _CurrentView = _VariableView;
+            _CurrentView.Draw();
         }
 
         private void DrawMenu(int position)
@@ -345,18 +336,14 @@ namespace cmd
             {
                 IMDbgCommand dbgcmd = null;
                 string cmdArgs = null;
-                string cmdLine = _InputBuffer.ToString();
+                string cmdLine = _Prompt.ToString();
                 if (string.IsNullOrEmpty(cmdLine)) return;
 
                 _CmdHistory.Add(cmdLine);
                 _CmdHistoryIdx = 0;
                 _Shell.Commands.ParseCommand(cmdLine, out dbgcmd, out cmdArgs);
+                _Prompt.EraseToEnd();
                 dbgcmd.Execute(cmdArgs);
-
-                _InputBuffer.Clear();
-                _CursorPosition = 0;
-
-                // display current location if debugging
                 DisplaySource();
             }
             catch (Exception ex)
@@ -466,9 +453,9 @@ namespace cmd
 
         public void WriteOutput(string outputType, string output)
         {
-            _CommandBuffer.Append(output);
-            _CurrentBuffer = _CommandBuffer;
-            _CurrentBuffer.Draw();
+            _CommandView.Append(output);
+            _CurrentView = _CommandView;
+            _CurrentView.Draw();
         }
 
         public bool ReadCommand(out string command)
@@ -478,9 +465,9 @@ namespace cmd
 
         public void WriteOutput(string outputType, string message, int highlightStart, int highlightLen)
         {
-            _CommandBuffer.Append(message);
-            _CurrentBuffer = _CommandBuffer;
-            _CurrentBuffer.Draw();
+            _CommandView.Append(message);
+            _CurrentView = _CommandView;
+            _CurrentView.Draw();
         }
     }
 }

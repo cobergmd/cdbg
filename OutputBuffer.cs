@@ -4,22 +4,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace cmd
+namespace cjomd.Mdbg.Extensions.Cdbg
 {
     public class OutputBuffer
     {
-        private List<string> _Lines = new List<string>();
-        private int _LineOffset = 0;
-        private ConsoleColor _TextColor = ConsoleColor.DarkGreen;
-        private bool _ShowLineNumbers = false;
+        protected List<string> _Lines = new List<string>();
+        protected int _LineOffset = 0;
         
         public string Name { get; set; }
         public int HighLight { get; set; }
 
-        public OutputBuffer(string name, ConsoleColor textColor, bool showLineNumbers)
+        public OutputBuffer(string name)
         {
-            _TextColor = textColor;
-            _ShowLineNumbers = showLineNumbers;
             this.Name = name;
         }
 
@@ -69,15 +65,11 @@ namespace cmd
             _Lines.Clear();
         }
 
-        public void Draw()
+        virtual public void Draw()
         {
-            int top = Console.WindowTop;
             int bottom = Console.WindowHeight - 2;
-
-            Console.ForegroundColor = _TextColor;
-            ConsoleColor currentBGC = Console.BackgroundColor;
-
             int count = _Lines.Count;
+
             for (int i = 0; i <= bottom; i++)
             {
                 Console.SetCursorPosition(0, i);
@@ -86,17 +78,9 @@ namespace cmd
                 if ((_LineOffset + i) <= (count - 1))
                 {
                     int idx = i + _LineOffset;
-                    string linenum = idx.ToString().PadLeft(4);
-                    if (i == HighLight-1)
-                        Console.BackgroundColor = ConsoleColor.Yellow;
-                    else
-                        Console.BackgroundColor = currentBGC;
-
-                    Console.Write(String.Format("{0} {1}", _ShowLineNumbers ? linenum : "", _Lines[idx]));
+                    Console.Write(String.Format("{0}", _Lines[idx]));
                 }
             }
-
-            Console.ResetColor();
         }
     }
 }

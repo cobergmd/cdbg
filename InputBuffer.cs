@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace cmd
+namespace cjomd.Mdbg.Extensions.Cdbg
 {
     public class InputBuffer
     {
-        private static readonly int _BufSize = 1000;
-        private char[] _Buffer = new char[_BufSize];
-        private int _BufferIdx = 0;
+        protected static readonly int _BufSize = 1000;
+        protected char[] _Buffer = new char[_BufSize];
+        protected int _BufferIdx = 0;
 
         public int Length
         {

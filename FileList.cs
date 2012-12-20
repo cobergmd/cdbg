@@ -6,7 +6,7 @@ using System.Text;
 
 using Microsoft.Samples.Tools.Mdbg;
 
-namespace cmd
+namespace cjomd.Mdbg.Extensions.Cdbg
 {
     public class FileList
     {
@@ -53,14 +53,14 @@ namespace cmd
             LoadCommandList(shell);
         }
 
-        public void Draw(InputBuffer buffer)
+        public void Draw(string pattern)
         {
             Erase();
 
-            string buffString = buffer.ToString().Trim();
-            if (buffString == string.Empty) return;
+            string matchString = pattern.Trim();
+            if (matchString == string.Empty) return;
 
-            int maxlen = CreateAutoCompleteList(buffString);
+            int maxlen = CreateAutoCompleteList(matchString);
 
             int displaycount = _AutoCompleteList.Count();
             if (displaycount == 0) return; // nothing matched, get out

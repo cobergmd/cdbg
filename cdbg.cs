@@ -7,7 +7,7 @@ using Microsoft.Samples.Tools.Mdbg;
 
 [assembly:CLSCompliant(true)]
 
-namespace cmd
+namespace cjomd.Mdbg.Extensions.Cdbg
 {
     // extension class name must have [MDbgExtensionEntryPointClass] attribute on it and implement a LoadExtension()
     [MDbgExtensionEntryPointClass(
