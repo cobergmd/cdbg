@@ -1,4 +1,8 @@
-﻿using System;
+﻿// CDBG - A console extension for the Microsoft MDBG debugger
+// Copyright (c) 2013 Craig Oberg
+// Licensed under the MIT License (MIT) http://opensource.org/licenses/MIT
+
+using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +16,6 @@ namespace cjomd.Mdbg.Extensions.Cdbg
         protected int _LineOffset = 0;
         
         public string Name { get; set; }
-        public int HighLight { get; set; }
 
         public OutputBuffer(string name)
         {
@@ -21,13 +24,16 @@ namespace cjomd.Mdbg.Extensions.Cdbg
 
         public void IncreasePage()
         {
-            int pagesize = ((Console.WindowHeight - 2) - Console.WindowTop) + 1;
-            _LineOffset += pagesize;
+            int pagesize = ((Console.WindowHeight - 3) - Console.WindowTop) + 1;
+            if ((_LineOffset + pagesize) < _Lines.Count)
+            {
+                _LineOffset += pagesize;
+            }
         }
 
         public void DecreasePage()
         {
-            int pagesize = ((Console.WindowHeight - 2) - Console.WindowTop) + 1;
+            int pagesize = ((Console.WindowHeight - 3) - Console.WindowTop) + 1;
             if (pagesize < _LineOffset)
             {
                 _LineOffset -= pagesize;
@@ -65,12 +71,11 @@ namespace cjomd.Mdbg.Extensions.Cdbg
             _Lines.Clear();
         }
 
-        virtual public void Draw()
+        virtual public void Draw(int startY, int endY)
         {
-            int bottom = Console.WindowHeight - 2;
             int count = _Lines.Count;
 
-            for (int i = 0; i <= bottom; i++)
+            for (int i = startY; i <= endY; i++)
             {
                 Console.SetCursorPosition(0, i);
                 Console.Write(string.Empty.PadRight(Console.WindowWidth, ' '));

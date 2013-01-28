@@ -1,4 +1,8 @@
-﻿using System;
+﻿// CDBG - A console extension for the Microsoft MDBG debugger
+// Copyright (c) 2013 Craig Oberg
+// Licensed under the MIT License (MIT) http://opensource.org/licenses/MIT
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,15 +17,13 @@ namespace cjomd.Mdbg.Extensions.Cdbg
             this.Append("********** Command Output Buffer **********");
         }
 
-        public override void Draw()
+        public override void Draw(int position, int height)
         {
             int top = Console.WindowTop;
-            int bottom = Console.WindowHeight - 3;
-
             Console.ForegroundColor = ConsoleColor.DarkGray;
 
             int count = _Lines.Count;
-            for (int i = 0; i <= bottom; i++)
+            for (int i = position; i <= height; i++)
             {
                 Console.SetCursorPosition(0, i);
                 Console.Write(string.Empty.PadRight(Console.WindowWidth, ' '));

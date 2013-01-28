@@ -1,4 +1,8 @@
-﻿using System;
+﻿// CDBG - A console extension for the Microsoft MDBG debugger
+// Copyright (c) 2013 Craig Oberg
+// Licensed under the MIT License (MIT) http://opensource.org/licenses/MIT
+
+using System;
 using System.IO;
 using System.Threading;
 using System.Security.Permissions;

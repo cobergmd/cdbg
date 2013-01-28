@@ -1,4 +1,8 @@
-﻿using System;
+﻿// CDBG - A console extension for the Microsoft MDBG debugger
+// Copyright (c) 2013 Craig Oberg
+// Licensed under the MIT License (MIT) http://opensource.org/licenses/MIT
+
+using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,7 +18,7 @@ namespace cjomd.Mdbg.Extensions.Cdbg
     public class Screen : IMDbgIO, IMDbgIO2
     {
         private string[] _MainMenu = new string[] { "Help  ",
-                                                 "View",
+                                                 "View  ",
                                                  "      ",
                                                  "Quit  ",
                                                  "Run   ",
@@ -62,8 +66,8 @@ namespace cjomd.Mdbg.Extensions.Cdbg
             _Shell = shell;
             _OldIo = _Shell.IO;
             _CurrentMenu = _MainMenu;
-            _FileList = new FileList(shell, Console.WindowHeight - 6);
-            _VariableView = new VariableViewer("#var#", _Shell);
+            _FileList = new FileList(shell, Console.WindowHeight - 7);
+            _VariableView = new VariableViewer(_Shell, "#vars#");
             _Buffers.Add(_CommandView);
         }
 
@@ -91,7 +95,7 @@ namespace cjomd.Mdbg.Extensions.Cdbg
             if (_CurrentView == _CommandView)
             {
                 _CommandView.Clear();
-                _CommandView.Draw();
+                _CommandView.Draw(0, Console.WindowHeight - 3);
             }
         }
 
@@ -127,8 +131,26 @@ namespace cjomd.Mdbg.Extensions.Cdbg
             }
             if (_CurrentView != null)
             {
-                _CurrentView.HighLight = highlight;
-                _CurrentView.Draw();
+                if (_CurrentView is SourceViewer)
+                {
+                    SourceViewer sviewer = _CurrentView as SourceViewer;
+                    sviewer.HighLight = highlight;
+
+                    MDbgBreakpointCollection breakpoints = _Shell.Debugger.Processes.Active.Breakpoints;
+                    foreach (MDbgBreakpoint b in breakpoints)
+                    {
+                        if (b.Location is IBreakpointBySourceLine)
+                        {
+                            IBreakpointBySourceLine bp = b.Location as IBreakpointBySourceLine;
+                            if (path.Equals(bp.FileName))
+                            {
+                                sviewer.AddBreakpoint(bp.LineNumber);
+                            }
+                        }
+                    }
+                }
+
+                _CurrentView.Draw(0, Console.WindowHeight - 3);
             }
         }
 
@@ -178,7 +200,7 @@ namespace cjomd.Mdbg.Extensions.Cdbg
                 }
                 else if (cki.Key == ConsoleKey.F2)
                 {
-                    ShowVariableViewer();
+                    DrawVariableViewer();
                 }
                 else if (cki.Key == ConsoleKey.F4)
                 {
@@ -305,14 +327,25 @@ namespace cjomd.Mdbg.Extensions.Cdbg
             }
             if (_CurrentView != null && refreshViewer)
             {
-                _CurrentView.Draw();
+                _CurrentView.Draw(0, Console.WindowHeight - 3);
             }
         }
 
-        private void ShowVariableViewer()
+        private void DrawVariableViewer()
         {
-            _CurrentView = _VariableView;
-            _CurrentView.Draw();
+            int totalsize = Console.WindowHeight - 3;
+            int splitpos = 0;
+            if (totalsize % 2 == 0)
+            {
+                splitpos = (totalsize / 2) + 1;
+            }
+            else
+            {
+                splitpos = ((totalsize + 1) / 2) + 1;
+            }
+
+            //_CurrentView.Draw(0, topsize);
+            _VariableView.Draw(splitpos + 1, totalsize);
         }
 
         private void DrawMenu(int position)
@@ -455,7 +488,7 @@ namespace cjomd.Mdbg.Extensions.Cdbg
         {
             _CommandView.Append(output);
             _CurrentView = _CommandView;
-            _CurrentView.Draw();
+            _CurrentView.Draw(0, Console.WindowHeight - 3);
         }
 
         public bool ReadCommand(out string command)
@@ -467,7 +500,7 @@ namespace cjomd.Mdbg.Extensions.Cdbg
         {
             _CommandView.Append(message);
             _CurrentView = _CommandView;
-            _CurrentView.Draw();
+            _CurrentView.Draw(0, Console.WindowHeight - 3);
         }
     }
 }
